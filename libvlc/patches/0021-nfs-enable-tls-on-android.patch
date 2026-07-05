@@ -22,9 +22,9 @@ update rules.mak to apply it during the libnfs build.
 
 Message-Id: <nfs-enable-tls-on-android.vlc-android.fix>
 ---
- contrib/src/nfs/0009-tls-allow-on-android.patch | 34 ++++++++++++++++++++++++++++++++++
+ contrib/src/nfs/0009-tls-allow-on-android.patch | 27 +++++++++++++++++++++++++++
  contrib/src/nfs/rules.mak                       |  1 +
- 2 files changed, 35 insertions(+)
+ 2 files changed, 28 insertions(+)
  create mode 100644 contrib/src/nfs/0009-tls-allow-on-android.patch
 
 diff --git a/contrib/src/nfs/0009-tls-allow-on-android.patch b/contrib/src/nfs/0009-tls-allow-on-android.patch
@@ -32,7 +32,7 @@ new file mode 100644
 index 0000000000..08e0ee4caf
 --- /dev/null
 +++ b/contrib/src/nfs/0009-tls-allow-on-android.patch
-@@ -0,0 +1,34 @@
+@@ -0,0 +1,27 @@
 +--- a/CMakeLists.txt
 ++++ b/CMakeLists.txt
 +@@ -68,7 +68,7 @@ if(ENABLE_MULTITHREADING AND PTHREAD_LIBRARY)
@@ -51,20 +51,13 @@ index 0000000000..08e0ee4caf
 +   #
 +   find_package(GnuTLS "3.4.6")
 +   if(GNUTLS_FOUND)
-+     set(CMAKE_REQUIRED_INCLUDES ${GNUTLS_INCLUDE_DIR})
-+     check_include_file("gnutls/gnutls.h" HAVE_GNUTLS_H)
-+     if(NOT HAVE_GNUTLS_H EQUAL "1")
-+       message(FATAL_ERROR "GnuTLS found but gnutls/gnutls.h not found, GNUTLS_INCLUDE_DIR is ${GNUTLS_INCLUDE_DIR}")
-+     endif()
-+     check_include_file("linux/tls.h" HAVE_LINUX_TLS_H)
-+     if(NOT HAVE_LINUX_TLS_H EQUAL "1")
-+       message(STATUS "GnuTLS found but linux/tls.h not found, likely a kernel w/o kTLS support, can't enable TLS support")
-+     else()
-+       message(STATUS "Using ${GNUTLS_LIBRARIES}")
-+       add_definitions(-DHAVE_TLS)
-+       list(APPEND SYSTEM_LIBRARIES ${GNUTLS_LIBRARIES})
-+       add_subdirectory(tls)
-+     endif()
++     set(HAVE_GNUTLS_H 1)
++     # check_include_file("linux/tls.h" ...) skipped: Android NDK
++     # may not ship linux/tls.h, so rely on GnuTLS alone for TLS.
++     message(STATUS "Using ${GNUTLS_LIBRARIES} (TLS enabled for Android)")
++     add_definitions(-DHAVE_TLS)
++     list(APPEND SYSTEM_LIBRARIES ${GNUTLS_LIBRARIES})
++     add_subdirectory(tls)
 +   endif()
 + endif()
 diff --git a/contrib/src/nfs/rules.mak b/contrib/src/nfs/rules.mak
