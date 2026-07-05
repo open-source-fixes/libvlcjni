@@ -16,61 +16,31 @@ differently, which causes async callbacks (mount_export_cb, nfs_mount_cb,
 nfs_stat64_cb, nfs_opendir_cb) to either not fire or fire without
 completing, preventing NFS directory browsing from working.
 
-Add a new contrib patch that fixes libnfs's CMakeLists.txt to also
-treat Android as a Linux-like system for TLS/GnuTLS detection, and
-update rules.mak to apply it during the libnfs build.
+Fix by patching the downloaded libnfs source after $(MOVE):
+ - Change CMAKE_SYSTEM_NAME check to include Android
+ - Replace the check_include_file guard (which uses try_compile that
+   ignores contrib include paths when cross-compiling) with a direct
+   set(HAVE_GNUTLS_H 1) since find_package(GnuTLS) already confirmed
+   the library exists.
 
 Message-Id: <nfs-enable-tls-on-android.vlc-android.fix>
 ---
- contrib/src/nfs/0009-tls-allow-on-android.patch | 27 +++++++++++++++++++++++++++
- contrib/src/nfs/rules.mak                       |  1 +
- 2 files changed, 28 insertions(+)
- create mode 100644 contrib/src/nfs/0009-tls-allow-on-android.patch
+ contrib/src/nfs/rules.mak | 4 ++++
+ 1 file changed, 4 insertions(+)
 
-diff --git a/contrib/src/nfs/0009-tls-allow-on-android.patch b/contrib/src/nfs/0009-tls-allow-on-android.patch
-new file mode 100644
-index 0000000000..08e0ee4caf
---- /dev/null
-+++ b/contrib/src/nfs/0009-tls-allow-on-android.patch
-@@ -0,0 +1,27 @@
-+--- a/CMakeLists.txt
-++++ b/CMakeLists.txt
-+@@ -68,7 +68,7 @@ if(ENABLE_MULTITHREADING AND PTHREAD_LIBRARY)
-+     list(APPEND SYSTEM_LIBRARIES pthread)
-+ endif()
-+
-+-if(CMAKE_SYSTEM_NAME STREQUAL Linux)
-++if(CMAKE_SYSTEM_NAME STREQUAL Linux OR CMAKE_SYSTEM_NAME STREQUAL Android)
-+   add_definitions("-D_U_=__attribute__((unused))")
-+   #
-+   # Currently RPC-with-TLS support is only available on Linux since it
-+   # depends on kTLS support on Linux.  Android uses the Linux kernel
-+   # and may have kTLS available.
-+   #
-+   # TODO: BSD also has kTLS support, but that will need separate validation.
-+   #
-+   find_package(GnuTLS "3.4.6")
-+   if(GNUTLS_FOUND)
-+     set(HAVE_GNUTLS_H 1)
-+     # check_include_file("linux/tls.h" ...) skipped: Android NDK
-+     # may not ship linux/tls.h, so rely on GnuTLS alone for TLS.
-+     message(STATUS "Using ${GNUTLS_LIBRARIES} (TLS enabled for Android)")
-+     add_definitions(-DHAVE_TLS)
-+     list(APPEND SYSTEM_LIBRARIES ${GNUTLS_LIBRARIES})
-+     add_subdirectory(tls)
-+   endif()
-+ endif()
 diff --git a/contrib/src/nfs/rules.mak b/contrib/src/nfs/rules.mak
-index cd890fb0bd..f9338adac5 100644
+index cd890fb0bd..f1b8a3e4d9 100644
 --- a/contrib/src/nfs/rules.mak
 +++ b/contrib/src/nfs/rules.mak
-@@ -29,6 +29,7 @@ nfs: libnfs-$(NFS_VERSION).tar.gz .sum-nfs
- 	$(APPLY) $(SRC)/nfs/0001-cmake-export-the-necessary-library-in-the-pkg-config.patch
+@@ -30,5 +30,8 @@ nfs: libnfs-$(NFS_VERSION).tar.gz .sum-nfs
  	$(APPLY) $(SRC)/nfs/0007-tls-add-support-for-kernel-without-TLS_1_3_VERSION.patch
  	$(APPLY) $(SRC)/nfs/0008-tls-define-TLS_RX-if-it-s-missing.patch
-+	$(APPLY) $(SRC)/nfs/0009-tls-allow-on-android.patch
  	$(MOVE)
++	# Fix CMakeLists.txt: allow TLS on Android, skip broken check_include_file
++	sed -i 's/if(CMAKE_SYSTEM_NAME STREQUAL Linux)/if(CMAKE_SYSTEM_NAME STREQUAL Linux OR CMAKE_SYSTEM_NAME STREQUAL Android)/' $@/CMakeLists.txt
++	sed -i '/check_include_file("gnutls\/gnutls.h"/,/endif()/c\    set(HAVE_GNUTLS_H 1)' $@/CMakeLists.txt
 
  .nfs: nfs toolchain.cmake
+ 	$(CMAKECLEAN)
 --
 2.52.0
