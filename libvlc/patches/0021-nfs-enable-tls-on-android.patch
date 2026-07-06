@@ -1,46 +1,34 @@
-From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
-Message-ID: <nfs-enable-tls-on-android.vlc-android.fix>
-From: VLC Android NFS Fix <noreply@example.com>
-Date: Sat, 5 Jul 2026 00:00:00 +0000
+From a0f2562fdbcecf8c4a58b6e7223a0334b72d865c Mon Sep 17 00:00:00 2001
+From: VLC Android NFS Fix <nfs-fix@vlc.local>
+Date: Sun, 5 Jul 2026 17:17:06 +0530
 Subject: [PATCH 21/21] contrib: nfs: enable TLS/GnuTLS support on Android
 
-libnfs 6.0's CMakeLists.txt restricts TLS (GnuTLS) detection to
+libnfs 6.0s CMakeLists.txt restricts TLS (GnuTLS) detection to
 CMAKE_SYSTEM_NAME=Linux only.  The VLC contrib toolchain sets
 CMAKE_SYSTEM_NAME=Android, so the TLS codepath is silently excluded.
+When TLS is compiled out, the RPC event loop handles connection-state
+transitions differently, causing async callbacks to either not fire
+or fire without completing, preventing NFS directory browsing.
 
-With the old autotools build (libnfs 5.x), GnuTLS was detected via
-pkg-config regardless of platform name, so TLS was enabled on Android.
-When TLS is compiled out of libnfs 6.x, the RPC event loop state
-machine in rpc_service() handles connection-state transitions
-differently, which causes async callbacks (mount_export_cb, nfs_mount_cb,
-nfs_stat64_cb, nfs_opendir_cb) to either not fire or fire without
-completing, preventing NFS directory browsing from working.
-
-Fix by patching the downloaded libnfs source after $(MOVE):
- - Change CMAKE_SYSTEM_NAME check to include Android
- - Replace the check_include_file guard (which uses try_compile that
-   ignores contrib include paths when cross-compiling) with a direct
-   set(HAVE_GNUTLS_H 1) since find_package(GnuTLS) already confirmed
-   the library exists.
+sed 1: Change CMAKE_SYSTEM_NAME check to include Android
+sed 2: Replace broken check_include_file with set(HAVE_GNUTLS_H 1)
+       since find_package(GnuTLS) already verified the library exists
+       and check_include_file uses try_compile which ignores the
+       contrib include path when cross-compiling.
 
 Message-Id: <nfs-enable-tls-on-android.vlc-android.fix>
----
- contrib/src/nfs/rules.mak | 4 ++++
- 1 file changed, 4 insertions(+)
 
 diff --git a/contrib/src/nfs/rules.mak b/contrib/src/nfs/rules.mak
-index cd890fb0bd..f1b8a3e4d9 100644
+index cd890fb0bd..b3f9c17313 100644
 --- a/contrib/src/nfs/rules.mak
 +++ b/contrib/src/nfs/rules.mak
-@@ -30,5 +30,8 @@ nfs: libnfs-$(NFS_VERSION).tar.gz .sum-nfs
+@@ -30,6 +30,9 @@ nfs: libnfs-$(NFS_VERSION).tar.gz .sum-nfs
  	$(APPLY) $(SRC)/nfs/0007-tls-add-support-for-kernel-without-TLS_1_3_VERSION.patch
  	$(APPLY) $(SRC)/nfs/0008-tls-define-TLS_RX-if-it-s-missing.patch
  	$(MOVE)
-+	# Fix CMakeLists.txt: allow TLS on Android, skip broken check_include_file
++	# Allow TLS on Android; skip broken check_include_file when cross-compiling
 +	sed -i 's/if(CMAKE_SYSTEM_NAME STREQUAL Linux)/if(CMAKE_SYSTEM_NAME STREQUAL Linux OR CMAKE_SYSTEM_NAME STREQUAL Android)/' $@/CMakeLists.txt
 +	sed -i '/check_include_file("gnutls\/gnutls.h"/,/endif()/c\    set(HAVE_GNUTLS_H 1)' $@/CMakeLists.txt
-
+ 
  .nfs: nfs toolchain.cmake
  	$(CMAKECLEAN)
---
-2.52.0
